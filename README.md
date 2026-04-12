@@ -1,96 +1,96 @@
 # javascript-recon
 
-Script enxuto de reconhecimento focado em duas coisas: **enumeração de subdomínios** e **download de arquivos JavaScript**. Ideal para a fase inicial de bug bounty onde o objetivo é mapear a superfície de ataque e coletar JS para análise estática de endpoints, tokens e lógica de negócio.
+Lightweight reconnaissance script focused on two things: **subdomain enumeration** and **JavaScript file downloads**. Perfect for the initial phase of bug bounty hunting where the goal is to map the attack surface and collect JS for static analysis of endpoints, tokens, and business logic.
 
 ---
 
-## Uso
+## Usage
 
 ```bash
-# Modo interativo — o script pergunta o domínio
+# Interactive mode — the script asks for the domain
 ./recon-js.sh
 
-# Passando o domínio direto
+# Passing the domain directly
 ./recon-js.sh example.com
 ```
 
-O script aceita o domínio das duas formas. No modo interativo, basta colar o domínio quando solicitado.
+The script works both ways. In interactive mode, simply paste the domain when prompted.
 
 ---
 
-## O que o script faz
+## What the script does
 
 ### Phase 1 — Subdomain Enumeration
 
-Combina 8 fontes passivas + 1 ativa (brute force DNS):
+Combines 8 passive sources + 1 active (DNS brute force):
 
-| Ferramenta | Tipo | O que cobre |
+| Tool | Type | Coverage |
 |---|---|---|
-| `subfinder -all` | Passivo | VirusTotal, Shodan, Censys, Chaos, URLScan, etc. (50+ fontes) |
-| `amass` | Passivo | Certificados, DNS passivo, múltiplos data brokers (timeout: 3min) |
-| `crt.sh` | Passivo | Certificate Transparency logs (todos os certificados emitidos) |
-| Wayback CDX | Passivo | Subdomínios em URLs históricas do Wayback Machine |
-| `gau` | Passivo | Wayback, CommonCrawl, OTX (AlienVault), URLScan.io |
-| `chaos` | Passivo | Dataset público da ProjectDiscovery |
-| `assetfinder` | Passivo | Facebook CT, crt.sh, grupos distintos do subfinder |
-| `findomain` | Passivo | Facebook CT logs, VirusTotal, Shodan, Spyse |
-| `puredns` (brute force) | **Ativo** | DNS brute force com `best-dns-wordlist.txt` — acha subdomínios que **nunca apareceram** em nenhuma fonte passiva (staging, dev, internal) |
+| `subfinder -all` | Passive | VirusTotal, Shodan, Censys, Chaos, URLScan, etc. (50+ sources) |
+| `amass` | Passive | Certificates, passive DNS, multiple data brokers (timeout: 3min) |
+| `crt.sh` | Passive | Certificate Transparency logs (all issued certificates) |
+| Wayback CDX | Passive | Subdomains from historical URLs in Wayback Machine |
+| `gau` | Passive | Wayback, CommonCrawl, OTX (AlienVault), URLScan.io |
+| `chaos` | Passive | ProjectDiscovery public dataset |
+| `assetfinder` | Passive | Facebook CT, crt.sh, distinct groups from subfinder |
+| `findomain` | Passive | Facebook CT logs, VirusTotal, Shodan, Spyse |
+| `puredns` (brute force) | **Active** | DNS brute force with `best-dns-wordlist.txt` — finds subdomains that **never appeared** in any passive source (staging, dev, internal) |
 
-Todas as fontes são mescladas e deduplicadas. O resultado final é salvo em:
+All sources are merged and deduplicated. The final result is saved to:
 
 ```
 /home/kali/01-All-Domains/<domain>.txt
 ```
 
-Se o arquivo já existir de uma execução anterior, os novos subdomínios são **mergeados atomicamente** (sem duplicatas).
+If the file already exists from a previous run, new subdomains are **atomically merged** (no duplicates).
 
 ---
 
 ### Phase 2 — HTTP Probing
 
-Usa `httpx` para detectar quais subdomínios estão realmente respondendo HTTP/HTTPS. Isso filtra o ruído antes do crawling de JS.
+Uses `httpx` to detect which subdomains are actually responding with HTTP/HTTPS. This filters noise before JS crawling.
 
-- **50 threads**, timeout de 10s por host
-- Se `httpx` não estiver instalado, gera lista de URLs `https://` como fallback
+- **50 threads**, 10s timeout per host
+- If `httpx` isn't installed, generates `https://` URLs as fallback
 
 ---
 
 ### Phase 3 — JS URL Discovery
 
-Coleta URLs de arquivos `.js` de múltiplas fontes:
+Collects JavaScript `.js` file URLs from multiple sources:
 
-| Ferramenta | Como descobre JS |
+| Tool | How it discovers JS |
 |---|---|
-| `subjs` | Faz requisição nos hosts vivos e extrai tags `<script src="">` |
-| `getJS` | Mesmo princípio, com resolução de caminhos relativos (`--complete`) |
-| `katana` | Crawler ativo com JavaScript rendering (`-jc`), profundidade 2 (timeout: 5min) |
-| `gau` | URLs históricas de JS no Wayback / CommonCrawl |
-| Wayback CDX | Query direta por `*.js` no CDX API |
+| `subjs` | Makes requests to live hosts and extracts `<script src="">` tags |
+| `getJS` | Same principle, with relative path resolution (`--complete`) |
+| `katana` | Active crawler with JavaScript rendering (`-jc`), depth 2 (timeout: 5min) |
+| `gau` | Historical JS URLs from Wayback / CommonCrawl |
+| Wayback CDX | Direct query for `*.js` in CDX API |
 
-Todas as URLs são deduplicadas antes do download.
+All URLs are deduplicated before download.
 
 ---
 
-### Phase 4 — Download de JS
+### Phase 4 — JS Download
 
-Baixa todos os arquivos `.js` descobertos para:
+Downloads all discovered `.js` files to:
 
 ```
 /home/kali/03-JS-Download/<domain>/
 ```
 
-- **Nomenclatura dos arquivos**: `host_caminho_arquivo.js` (evita colisão entre subdomínios diferentes)
-- **Limite**: 1.000 arquivos por execução (configurável na variável `MAX_DOWNLOADS`)
-- **Idempotente**: se o arquivo já existiu em uma execução anterior, é pulado
-- Arquivos vazios são removidos automaticamente
+- **File naming**: `host_path_filename.js` (prevents collision between different subdomains)
+- **Limit**: 1,000 files per run (configurable in `MAX_DOWNLOADS` variable)
+- **Idempotent**: if a file already exists from a previous run, it's skipped
+- Empty files are automatically removed
 
 ---
 
-## Saída
+## Output
 
 ```
 /home/kali/01-All-Domains/
-└── example.com.txt           ← todos os subdomínios (mergeado com histórico)
+└── example.com.txt           ← all subdomains (merged with history)
 
 /home/kali/03-JS-Download/
 └── example.com/
@@ -101,18 +101,18 @@ Baixa todos os arquivos `.js` descobertos para:
 
 ---
 
-## Dependências
+## Dependencies
 
-### Obrigatórias
+### Required
 
-| Ferramenta | Instalação |
+| Tool | Installation |
 |---|---|
 | `curl` | `apt install curl` |
 | `python3` | `apt install python3` |
 
-### Recomendadas (o script funciona sem, mas com menos cobertura)
+### Recommended (script works without, but with less coverage)
 
-| Ferramenta | Instalação |
+| Tool | Installation |
 |---|---|
 | `subfinder` | `go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest` |
 | `amass` | `go install github.com/owasp-amass/amass/v4/...@master` |
@@ -126,27 +126,27 @@ Baixa todos os arquivos `.js` descobertos para:
 | `getJS` | `go install github.com/003random/getJS@latest` |
 | `puredns` | `go install github.com/d3mondev/puredns/v2@latest` |
 
-### Wordlist para brute force DNS
+### Wordlist for DNS brute force
 
-O puredns usa a wordlist em `/home/kali/wordlists/best-dns-wordlist.txt`. Se não existir, o brute force é pulado. Para baixar:
+Puredns uses the wordlist at `/home/kali/wordlists/best-dns-wordlist.txt`. If it doesn't exist, brute force is skipped. To download:
 
 ```bash
-# Assetnote best-dns-wordlist (recomendado)
+# Assetnote best-dns-wordlist (recommended)
 wget -q https://wordlists-cdn.assetnote.io/data/manual/best-dns-wordlist.txt \
     -O /home/kali/wordlists/best-dns-wordlist.txt
 ```
 
 ---
 
-## Por que brute force DNS importa?
+## Why DNS brute force matters
 
-Fontes passivas (crt.sh, Wayback, subfinder) só encontram subdomínios que **já foram expostos** em algum lugar — certificados emitidos, URLs rastreadas, bancos de dados públicos. Subdomínios como `staging-api.example.com`, `dev-admin.example.com` ou `internal.example.com` frequentemente nunca apparecem em nenhuma fonte passiva. O `puredns` resolve isso tentando cada palavra da wordlist via DNS, com filtro automático de wildcards.
+Passive sources (crt.sh, Wayback, subfinder) only find subdomains that have **already been exposed** somewhere — issued certificates, crawled URLs, public databases. Subdomains like `staging-api.example.com`, `dev-admin.example.com`, or `internal.example.com` often never appear in any passive source. `puredns` solves this by attempting each word in the wordlist via DNS, with automatic wildcard filtering.
 
 ---
 
-## Segurança e boas práticas
+## Security and best practices
 
-- O domínio é validado por regex antes de qualquer execução (`^[a-z0-9]...$`)
-- Arquivos temporários ficam em `/tmp/recon-js-<pid>-<timestamp>/` e são removidos automaticamente ao fim
-- O merge de subdomínios usa `mktemp` + `mv` atômico para evitar leituras parciais
-- Nenhuma credencial é persistida ou logada
+- The domain is validated by regex before any execution (`^[a-z0-9]...$`)
+- Temporary files live in `/tmp/recon-js-<pid>-<timestamp>/` and are automatically removed at the end
+- Subdomain merging uses `mktemp` + atomic `mv` to prevent partial reads
+- No credentials are persisted or logged
