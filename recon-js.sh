@@ -322,6 +322,9 @@ else
     DOWNLOADED=0
     FAILED=0
     URL_MAP_FILE="$JS_DOWNLOAD_DIR/url_map.txt"
+    
+    # Ensure output directory exists
+    mkdir -p "$JS_DOWNLOAD_DIR" || { err "Failed to create directory: $JS_DOWNLOAD_DIR"; exit 1; }
     : > "$URL_MAP_FILE"  # truncate/create
 
     while IFS= read -r js_url; do
