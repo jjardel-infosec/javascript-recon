@@ -51,7 +51,26 @@ JS_DOWNLOAD_DIR="${JS_DOWNLOAD_DIR:-$HOME/03-JS-Download}/$TARGET"
 DNS_WORDLIST="${DNS_WORDLIST:-$HOME/wordlists/best-dns-wordlist.txt}"
 WORK_DIR="/tmp/recon-js-$$-$(date +%s)"
 
-mkdir -p "$ALL_DOMAINS_DIR" "$JS_DOWNLOAD_DIR" "$WORK_DIR/subs"
+_ensure_dir() {
+    local dir="$1"
+    if ! mkdir -p "$dir" 2>/dev/null; then
+        err "Cannot create directory: $dir"
+        err "Likely owned by root from a previous sudo run. Fix with:"
+        err "  sudo chown -R $(whoami):$(whoami) $(dirname "$dir")"
+        exit 1
+    fi
+    # Verify we can actually write to it
+    if ! [ -w "$dir" ]; then
+        err "No write permission on: $dir"
+        err "Fix with:"
+        err "  sudo chown -R $(whoami):$(whoami) $dir"
+        exit 1
+    fi
+}
+
+_ensure_dir "$ALL_DOMAINS_DIR"
+_ensure_dir "$JS_DOWNLOAD_DIR"
+mkdir -p "$WORK_DIR/subs"
 
 # Cleanup on exit
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -321,11 +340,12 @@ else
 
     DOWNLOADED=0
     FAILED=0
-    URL_MAP_FILE="$JS_DOWNLOAD_DIR/url_map.txt"
     
     # Ensure output directory exists
     mkdir -p "$JS_DOWNLOAD_DIR" || { err "Failed to create directory: $JS_DOWNLOAD_DIR"; exit 1; }
-    : > "$URL_MAP_FILE"  # truncate/create
+    
+    URL_MAP_FILE="$JS_DOWNLOAD_DIR/url_map.txt"
+    : > "$URL_MAP_FILE" || { err "Failed to create URL map file: $URL_MAP_FILE"; exit 1; }  # truncate/create
 
     while IFS= read -r js_url; do
         [ -z "$js_url" ] && continue
