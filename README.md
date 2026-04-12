@@ -155,23 +155,14 @@ Passive sources (crt.sh, Wayback, subfinder) only find subdomains that have **al
 
 ## Ethical and Responsible Use Statement
 
-The javascript-recon and jsecret tools were developed exclusively to support legitimate information security activities, including authorized penetration testing, bug bounty programs, technical audits, and academic research.
+The javascript-recon and jsecret tools are intended only for legitimate security work, such as authorized penetration testing, bug bounty programs, technical audits, and academic research.
 
-Your use must be strictly aligned with the following principles:
+Use them only when all of the following apply:
 
-**Prior Authorization**
-The tools must be used only on assets, systems, or environments for which formal and documented authorization exists.
+- 🛡️ **Prior Authorization**: use only on assets, systems, or environments with formal and documented authorization.
+- ⚖️ **Legal Compliance**: ensure the activity follows all applicable laws, including data protection and cybercrime regulations.
+- 🔒 **Confidentiality and Integrity**: do not access, collect, store, or disclose sensitive data without explicit authorization and a clear technical need.
+- 🎯 **Proportional Use**: limit validation to what is necessary to confirm impact, avoiding service disruption or any form of harm.
+- 📣 **Accountability**: misuse may lead to civil, administrative, or criminal consequences, and the responsibility rests entirely with the user.
 
-**Legal and Regulatory Compliance**
-You are entirely responsible for ensuring that use complies with all applicable laws, including data protection legislation and cybercrime statutes.
-
-**Respect for Confidentiality and Integrity**
-It is prohibited to access, collect, store, or disclose sensitive data without justified technical necessity and without explicit authorization.
-
-**Proportional and Responsible Use**
-The exploitation of vulnerabilities must be limited to what is necessary for technical validation, avoiding operational impacts, service unavailability, or any form of harm.
-
-**Accountability**
-Misuse of these tools may result in civil, administrative, and criminal sanctions, being entirely the user's responsibility.
-
-The purpose of these tools is to contribute to the strengthening of system security and user privacy, promoting ethical and responsible practices in the offensive security ecosystem.
+The purpose of these tools is to strengthen system security and user privacy through ethical and responsible offensive security practices.

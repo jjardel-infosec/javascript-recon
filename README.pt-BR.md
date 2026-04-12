@@ -155,23 +155,14 @@ Fontes passivas (crt.sh, Wayback, subfinder) só encontram subdomínios que **j�
 
 ## Declaração de Uso Ético e Responsável
 
-As ferramentas javascript-recon e jsecret foram desenvolvidas exclusivamente para apoiar atividades legítimas de segurança da informação, incluindo testes de intrusão autorizados, programas de bug bounty, auditorias técnicas e pesquisas acadêmicas.
+As ferramentas javascript-recon e jsecret são destinadas apenas a atividades legítimas de segurança, como testes de intrusão autorizados, programas de bug bounty, auditorias técnicas e pesquisas acadêmicas.
 
-Seu uso deve estar estritamente alinhado aos seguintes princípios:
+Use-as somente quando todos os pontos abaixo forem atendidos:
 
-**Autorização prévia**
-As ferramentas devem ser utilizadas apenas em ativos, sistemas ou ambientes para os quais exista autorização formal e documentada.
+- 🛡️ **Autorização prévia**: utilize apenas em ativos, sistemas ou ambientes com autorização formal e documentada.
+- ⚖️ **Conformidade legal**: garanta que a atividade esteja de acordo com todas as leis aplicáveis, incluindo normas de proteção de dados e crimes cibernéticos.
+- 🔒 **Confidencialidade e integridade**: não acesse, colete, armazene ou divulgue dados sensíveis sem autorização explícita e necessidade técnica clara.
+- 🎯 **Uso proporcional**: limite a validação ao necessário para confirmar o impacto, evitando indisponibilidade de serviços ou qualquer tipo de dano.
+- 📣 **Responsabilização**: o uso indevido pode resultar em sanções civis, administrativas ou penais, e a responsabilidade é inteiramente do usuário.
 
-**Conformidade legal e regulatória**
-O usuário é integralmente responsável por garantir que o uso esteja em conformidade com todas as leis aplicáveis, incluindo legislações de proteção de dados e crimes cibernéticos.
-
-**Respeito à confidencialidade e integridade**
-É proibido acessar, coletar, armazenar ou divulgar dados sensíveis sem necessidade técnica justificável e sem autorização explícita.
-
-**Uso proporcional e responsável**
-A exploração de vulnerabilidades deve ser limitada ao necessário para validação técnica, evitando impactos operacionais, indisponibilidade de serviços ou qualquer forma de dano.
-
-**Responsabilização**
-O uso indevido dessas ferramentas pode resultar em sanções civis, administrativas e penais, sendo de total responsabilidade do usuário.
-
-O objetivo dessas ferramentas é contribuir para o fortalecimento da segurança dos sistemas e da privacidade dos usuários, promovendo práticas éticas e responsáveis no ecossistema de segurança ofensiva.
+O objetivo dessas ferramentas é fortalecer a segurança dos sistemas e a privacidade dos usuários por meio de práticas éticas e responsáveis em segurança ofensiva.
