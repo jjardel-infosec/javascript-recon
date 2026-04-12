@@ -150,3 +150,28 @@ Fontes passivas (crt.sh, Wayback, subfinder) só encontram subdomínios que **j�
 - Arquivos temporários ficam em `/tmp/recon-js-<pid>-<timestamp>/` e são removidos automaticamente ao fim
 - O merge de subdomínios usa `mktemp` + `mv` atômico para evitar leituras parciais
 - Nenhuma credencial é persistida ou logada
+
+---
+
+## Declaração de Uso Ético e Responsável
+
+As ferramentas javascript-recon e jsecret foram desenvolvidas exclusivamente para apoiar atividades legítimas de segurança da informação, incluindo testes de intrusão autorizados, programas de bug bounty, auditorias técnicas e pesquisas acadêmicas.
+
+Seu uso deve estar estritamente alinhado aos seguintes princípios:
+
+**Autorização prévia**
+As ferramentas devem ser utilizadas apenas em ativos, sistemas ou ambientes para os quais exista autorização formal e documentada.
+
+**Conformidade legal e regulatória**
+O usuário é integralmente responsável por garantir que o uso esteja em conformidade com todas as leis aplicáveis, incluindo legislações de proteção de dados e crimes cibernéticos.
+
+**Respeito à confidencialidade e integridade**
+É proibido acessar, coletar, armazenar ou divulgar dados sensíveis sem necessidade técnica justificável e sem autorização explícita.
+
+**Uso proporcional e responsável**
+A exploração de vulnerabilidades deve ser limitada ao necessário para validação técnica, evitando impactos operacionais, indisponibilidade de serviços ou qualquer forma de dano.
+
+**Responsabilização**
+O uso indevido dessas ferramentas pode resultar em sanções civis, administrativas e penais, sendo de total responsabilidade do usuário.
+
+O objetivo dessas ferramentas é contribuir para o fortalecimento da segurança dos sistemas e da privacidade dos usuários, promovendo práticas éticas e responsáveis no ecossistema de segurança ofensiva.
