@@ -1,168 +1,251 @@
 # javascript-recon
 
-Lightweight reconnaissance script focused on two things: **subdomain enumeration** and **JavaScript file downloads**. Perfect for the initial phase of bug bounty hunting where the goal is to map the attack surface and collect JS for static analysis of endpoints, tokens, and business logic.
+Lightweight Bash reconnaissance focused on practical client-side collection for bug bounty and authorized web recon. The workflow stays simple: enumerate subdomains, identify live hosts, discover frontend assets, download what matters, and keep the output usable for later analysis.
 
----
+The current implementation still preserves the original `./recon-js.sh [domain]` usage, but it now discovers and tracks more than obvious `.js` files.
 
 ## Usage
 
 ```bash
-# Interactive mode — the script asks for the domain
+# Interactive mode
 ./recon-js.sh
 
-# Passing the domain directly
+# Direct mode
 ./recon-js.sh example.com
+
+# Resume a prior run safely
+./recon-js.sh --resume example.com
+
+# Keep asset scope on the target domain only
+./recon-js.sh --allowlist example.com
+
+# Download JS-like files only
+./recon-js.sh --js-only example.com
 ```
 
-The script works both ways. In interactive mode, simply paste the domain when prompted.
+## What It Collects
 
----
+The project still prioritizes JavaScript recon, but it now expands discovery into adjacent client-side assets that are useful during review.
 
-## What the script does
+Discovered asset classes:
+
+- `.js`
+- `.mjs`
+- publicly exposed `.ts`
+- `.map`
+- `.json`
+- `.webmanifest`
+- `.wasm`
+- service workers
+- manifest and asset-manifest files
+- framework chunk/runtime assets
+
+Discovery sources:
+
+- passive subdomain sources: `subfinder`, `amass`, `crt.sh`, `gau`, `wayback`, `chaos`, `assetfinder`, `findomain`
+- optional DNS brute force via `puredns`
+- live-host probing with `httpx`
+- live asset extraction with `subjs`, `getJS`, and `katana`
+- HTML parsing for script, preload, and manifest hints
+- header parsing for `Link:` preload/modulepreload hints
+- `robots.txt` and `sitemap.xml`
+- `sourceMappingURL` comments
+- one recursive pass over downloaded text assets to catch referenced chunks, maps, manifests, and related files
+
+Modern frontend coverage is intentionally lightweight but useful. The script now detects common patterns from Webpack, Vite, Next.js, Nuxt, React, Angular, Vue, Astro, and SvelteKit without turning into a full stack fingerprinting framework.
+
+## Workflow
 
 ### Phase 1 — Subdomain Enumeration
 
-Combines 8 passive sources + 1 active (DNS brute force):
+Subdomain sources run with bounded parallelism, then merge into:
 
-| Tool | Type | Coverage |
-|---|---|---|
-| `subfinder -all` | Passive | VirusTotal, Shodan, Censys, Chaos, URLScan, etc. (50+ sources) |
-| `amass` | Passive | Certificates, passive DNS, multiple data brokers (timeout: 3min) |
-| `crt.sh` | Passive | Certificate Transparency logs (all issued certificates) |
-| Wayback CDX | Passive | Subdomains from historical URLs in Wayback Machine |
-| `gau` | Passive | Wayback, CommonCrawl, OTX (AlienVault), URLScan.io |
-| `chaos` | Passive | ProjectDiscovery public dataset |
-| `assetfinder` | Passive | Facebook CT, crt.sh, distinct groups from subfinder |
-| `findomain` | Passive | Facebook CT logs, VirusTotal, Shodan, Spyse |
-| `puredns` (brute force) | **Active** | DNS brute force with `best-dns-wordlist.txt` — finds subdomains that **never appeared** in any passive source (staging, dev, internal) |
-
-All sources are merged and deduplicated. The final result is saved to:
-
-```
-/home/kali/01-All-Domains/<domain>.txt
+```text
+$HOME/01-All-Domains/<domain>.txt
 ```
 
-If the file already exists from a previous run, new subdomains are **atomically merged** (no duplicates).
-
----
+Existing history is merged atomically, so reruns stay additive and predictable.
 
 ### Phase 2 — HTTP Probing
 
-Uses `httpx` to detect which subdomains are actually responding with HTTP/HTTPS. This filters noise before JS crawling.
+`httpx` is used when present. If it is missing, the script falls back to building `https://` and `http://` URLs from the subdomain list so the rest of the pipeline can still run.
 
-- **50 threads**, 10s timeout per host
-- If `httpx` isn't installed, generates `https://` URLs as fallback
+### Phase 3 — Client-Side Asset Discovery
 
----
+This phase now separates raw discovery from normalized discovery. Candidate URLs are collected from historical sources, crawlers, root page fetches, robots/sitemaps, and downloaded files, then normalized and deduplicated with source attribution intact.
 
-### Phase 3 — JS URL Discovery
+### Phase 3b — Candidate Verification
 
-Collects JavaScript `.js` file URLs from multiple sources:
+When `httpx` is available, the script verifies prioritized asset candidates before download and records:
 
-| Tool | How it discovers JS |
-|---|---|
-| `subjs` | Makes requests to live hosts and extracts `<script src="">` tags |
-| `getJS` | Same principle, with relative path resolution (`--complete`) |
-| `katana` | Active crawler with JavaScript rendering (`-jc`), depth 2 (timeout: 5min) |
-| `gau` | Historical JS URLs from Wayback / CommonCrawl |
-| Wayback CDX | Direct query for `*.js` in CDX API |
+- HTTP status
+- content type
+- content length
+- final URL after redirects
 
-All URLs are deduplicated before download.
+Verified assets move into a dedicated report, and obviously filtered responses are tracked separately. If `httpx` is missing, the script falls back to the discovered asset set instead of aborting.
 
----
+### Phase 4 — Download
 
-### Phase 4 — JS Download
+Download stays lightweight, but the implementation is more deliberate now:
 
-Downloads all discovered `.js` files to:
+- bounded parallel downloads
+- collision-resistant filenames with stable URL-based suffixes
+- JS-like assets kept in the target directory root
+- interesting non-JS assets stored in `_interesting/`
+- metadata captured during download: status, content-type, content-length, final URL, optional hash
+- failed downloads and skipped duplicates tracked separately
 
-```
-/home/kali/03-JS-Download/<domain>/
-```
+## Output Layout
 
-- **File naming**: `host_path_filename.js` (prevents collision between different subdomains)
-- **Limit**: 1,000 files per run (configurable in `MAX_DOWNLOADS` variable)
-- **Idempotent**: if a file already exists from a previous run, it's skipped
-- Empty files are automatically removed
+```text
+$HOME/01-All-Domains/
+└── example.com.txt
 
----
-
-## Output
-
-```
-/home/kali/01-All-Domains/
-└── example.com.txt           ← all subdomains (merged with history)
-
-/home/kali/03-JS-Download/
+$HOME/03-JS-Download/
 └── example.com/
-    ├── app.example.com_static_js_main.js
-    ├── cdn.example.com_assets_chunk.123abc.js
-    └── ...
+    ├── app.example.com_static_js_main-3c7b4b61c2.js
+    ├── cdn.example.com_assets_vendor-ff1287a4c1.js
+    ├── _interesting/
+    │   ├── app.example.com_manifest-a8712d0f66.json
+    │   └── app.example.com_service-worker-ccd7d93433.js
+    ├── url_map.txt
+    └── reports/
+        ├── discovered_urls.tsv
+        ├── verified_urls.tsv
+        ├── verification_filtered.tsv
+        ├── downloaded_files.tsv
+        ├── failed_downloads.tsv
+        ├── skipped_duplicates.tsv
+        ├── non_js_assets.tsv
+        ├── potential_interesting.tsv
+        ├── live_hosts.txt
+        ├── framework_hints.txt
+        └── run.log
 ```
 
----
+If JSON/CSV output is enabled, matching `.csv` and `.json` report files are also generated in `reports/`.
+
+## Reports
+
+The structured reports are designed for downstream tooling, triage, and repeatable workflows.
+
+- `discovered_urls.tsv`: normalized candidate URLs with asset type, host, sources, referrers, and interesting flag
+- `verified_urls.tsv`: pre-download verified assets with HTTP metadata when `httpx` is available
+- `verification_filtered.tsv`: candidates filtered out during verification because they did not pass the status check
+- `downloaded_files.tsv`: successful downloads with metadata and local path
+- `failed_downloads.tsv`: failed or empty downloads with reason and observed metadata
+- `skipped_duplicates.tsv`: assets skipped because the local file already existed
+- `non_js_assets.tsv`: discovered non-JS assets such as maps, manifests, JSON, and WASM
+- `potential_interesting.tsv`: files that are likely worth manual review even if they are not plain JS
+- `framework_hints.txt`: lightweight frontend fingerprint hints
+- `url_map.txt`: local file to source URL mapping for offline-to-live traceability
+
+## Options
+
+```text
+--resume        Reuse previous state where safe
+--allowlist     Keep asset scope on the target domain suffix only
+--js-only       Skip downloading non-JS interesting assets
+--no-json       Skip JSON report output
+--no-csv        Skip CSV report output
+-q, --quiet     Reduce console output
+```
+
+## Environment Overrides
+
+The project keeps its defaults lightweight, but the tuning surface is now clearer.
+
+```bash
+RECON_PROFILE=safe|balanced|aggressive
+ALL_DOMAINS_DIR=$HOME/01-All-Domains
+JS_DOWNLOAD_DIR=$HOME/03-JS-Download
+DNS_WORDLIST=$HOME/wordlists/best-dns-wordlist.txt
+TOOL_PARALLELISM=5
+ACTIVE_FETCH_CONCURRENCY=6
+GETJS_CONCURRENCY=5
+DOWNLOAD_CONCURRENCY=8
+HTTPX_THREADS=50
+MAX_ACTIVE_HOSTS=75
+MAX_DOWNLOADS=1000
+MAX_VERIFY=3000
+ENABLE_HASHING=1
+```
+
+`safe`, `balanced`, and `aggressive` are internal tuning profiles selected with `RECON_PROFILE`. They are intentionally env-driven for now so the CLI stays small.
 
 ## Dependencies
 
 ### Required
 
-| Tool | Installation |
+| Tool | Why |
 |---|---|
-| `curl` | `apt install curl` |
-| `python3` | `apt install python3` |
+| `bash` (4+) | required shell runtime for the script and installer |
+| `curl` | HTTP fetches, downloads, metadata capture |
+| `python3` | URL normalization and report generation |
 
-### Recommended (script works without, but with less coverage)
+### Recommended
 
-| Tool | Installation |
+| Tool | Role |
 |---|---|
-| `subfinder` | `go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest` |
-| `amass` | `go install github.com/owasp-amass/amass/v4/...@master` |
-| `assetfinder` | `go install github.com/tomnomnom/assetfinder@latest` |
-| `findomain` | [github.com/findomain/findomain/releases](https://github.com/findomain/findomain/releases) |
-| `chaos` | `go install github.com/projectdiscovery/chaos-client/cmd/chaos@latest` |
-| `httpx` | `go install github.com/projectdiscovery/httpx/cmd/httpx@latest` |
-| `gau` | `go install github.com/lc/gau/v2/cmd/gau@latest` |
-| `katana` | `go install github.com/projectdiscovery/katana/cmd/katana@latest` |
-| `subjs` | `go install github.com/lc/subjs@latest` |
-| `getJS` | `go install github.com/003random/getJS@latest` |
-| `puredns` | `go install github.com/d3mondev/puredns/v2@latest` |
+| `subfinder` | passive subdomain discovery |
+| `amass` | passive subdomain discovery |
+| `assetfinder` | passive subdomain discovery |
+| `findomain` | optional passive source |
+| `chaos` | passive subdomain discovery |
+| `httpx` | live host probing |
+| `gau` | historical URL collection |
+| `katana` | active crawling |
+| `subjs` | live JS extraction |
+| `getJS` | live JS extraction with relative-path resolution |
+| `puredns` | DNS brute force |
 
-### Wordlist for DNS brute force
-
-Puredns uses the wordlist at `/home/kali/wordlists/best-dns-wordlist.txt`. If it doesn't exist, brute force is skipped. To download:
+Install the dependency set with:
 
 ```bash
-# Assetnote best-dns-wordlist (recommended)
-wget -q https://wordlists-cdn.assetnote.io/data/manual/best-dns-wordlist.txt \
-    -O /home/kali/wordlists/best-dns-wordlist.txt
+./install.sh
 ```
 
----
+### DNS Wordlist
 
-## Why DNS brute force matters
+The default brute-force wordlist path is:
 
-Passive sources (crt.sh, Wayback, subfinder) only find subdomains that have **already been exposed** somewhere — issued certificates, crawled URLs, public databases. Subdomains like `staging-api.example.com`, `dev-admin.example.com`, or `internal.example.com` often never appear in any passive source. `puredns` solves this by attempting each word in the wordlist via DNS, with automatic wildcard filtering.
+```text
+$HOME/wordlists/best-dns-wordlist.txt
+```
 
----
+If that file is missing, `puredns` is skipped without stopping the run.
 
-## Security and best practices
+## Operational Notes
 
-- The domain is validated by regex before any execution (`^[a-z0-9]...$`)
-- Temporary files live in `/tmp/recon-js-<pid>-<timestamp>/` and are automatically removed at the end
-- Subdomain merging uses `mktemp` + atomic `mv` to prevent partial reads
-- No credentials are persisted or logged
+- The script validates the target domain before running any source.
+- Temporary files are created with `mktemp -d` and cleaned automatically.
+- Output directories are checked for write access before work starts.
+- Missing optional tools degrade coverage, not the whole run.
+- `--resume` reuses prior discovered, verified, and downloaded state where it is safe to do so.
+- Download writes are predictable and use temporary files before moving into place.
+- The downloader captures failures separately instead of letting one bad source abort the run.
+- `--allowlist` is optional because real-world frontend assets often live on CDNs.
 
----
+## Practical Follow-Up
 
-## Ethical and Responsible Use Statement
+```bash
+# Offline secret review against downloaded files
+jsecret -d $HOME/03-JS-Download/example.com
 
-The javascript-recon and jsecret tools are intended only for legitimate security work, such as authorized penetration testing, bug bounty programs, technical audits, and academic research.
+# Live-URL-oriented review using discovered URL report
+jsecret -f $HOME/03-JS-Download/example.com/reports/discovered_urls.tsv
 
-Use them only when all of the following apply:
+# Map a local finding back to the source URL
+grep 'filename.js' $HOME/03-JS-Download/example.com/url_map.txt
+```
 
-- 🛡️ **Prior Authorization**: use only on assets, systems, or environments with formal and documented authorization.
-- ⚖️ **Legal Compliance**: ensure the activity follows all applicable laws, including data protection and cybercrime regulations.
-- 🔒 **Confidentiality and Integrity**: do not access, collect, store, or disclose sensitive data without explicit authorization and a clear technical need.
-- 🎯 **Proportional Use**: limit validation to what is necessary to confirm impact, avoiding service disruption or any form of harm.
-- 📣 **Accountability**: misuse may lead to civil, administrative, or criminal consequences, and the responsibility rests entirely with the user.
+## Ethical And Responsible Use
 
-The purpose of these tools is to strengthen system security and user privacy through ethical and responsible offensive security practices.
+Use this project only for authorized security work, such as bug bounty programs, internal testing, audits, and research with documented permission.
+
+- Prior authorization is required.
+- Legal and contractual scope still applies.
+- Keep collection proportional to the task.
+- Treat downloaded client-side assets as potentially sensitive.
+- You are responsible for how and where the tooling is used.
