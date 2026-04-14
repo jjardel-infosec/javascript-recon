@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-# recon-js.sh — Lightweight subdomain enumeration + client-side asset download
+# recon-js.sh - Lightweight subdomain enumeration + client-side asset download
 # Usage: ./recon-js.sh <domain>
 
 set -uo pipefail
 
+RESET='\033[0m'
+BOLD='\033[1m'
+DIM='\033[2m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 RED='\033[0;31m'
-NC='\033[0m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+NC="$RESET"
 
 QUIET=0
 DEBUG="${DEBUG:-0}"
@@ -19,6 +24,20 @@ DOWNLOAD_INTERESTING_ASSETS=1
 ENFORCE_DOMAIN_ALLOWLIST=0
 TARGET=""
 SCRIPT_NAME="$(basename "$0")"
+ICON_OK='[+]'
+ICON_WARN='[!]'
+ICON_INFO='[*]'
+ICON_ERR='[-]'
+ICON_DEBUG='[dbg]'
+ICON_PHASE='[>]'
+ICON_SCAN='[*]'
+ICON_TARGET='[domain]'
+ICON_CLOCK='[time]'
+ICON_PROFILE='[profile]'
+ICON_STEP='->'
+ICON_PROMPT='[?]'
+ICON_DONE='[ok]'
+RULE_CHAR='-'
 
 ensure_bash_compat() {
     if [ -z "${BASH_VERSION:-}" ] || [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
@@ -97,31 +116,135 @@ normalize_boolean_flag() {
     esac
 }
 
+supports_color() {
+    [ -t 1 ] || return 1
+    [ -n "${NO_COLOR:-}" ] && return 1
+
+    case "${TERM:-}" in
+        ''|dumb)
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
+supports_unicode() {
+    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+        *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+repeat_char() {
+    local char="$1"
+    local count="$2"
+    local result=""
+
+    while [ "$count" -gt 0 ]; do
+        result="${result}${char}"
+        count=$((count - 1))
+    done
+
+    printf '%s' "$result"
+}
+
+setup_ui() {
+    if ! supports_color; then
+        RESET=''
+        BOLD=''
+        DIM=''
+        GREEN=''
+        YELLOW=''
+        CYAN=''
+        RED=''
+        BLUE=''
+        MAGENTA=''
+        NC=''
+    fi
+
+    if supports_unicode; then
+        ICON_OK='✔'
+        ICON_WARN='▲'
+        ICON_INFO='•'
+        ICON_ERR='✖'
+        ICON_DEBUG='◆'
+        ICON_PHASE='▶'
+        ICON_SCAN='◉'
+        ICON_TARGET='◎'
+        ICON_CLOCK='◷'
+        ICON_PROFILE='◌'
+        ICON_STEP='↳'
+        ICON_PROMPT='➜'
+        ICON_DONE='✓'
+        RULE_CHAR='─'
+    fi
+}
+
+ui_rule() {
+    printf '%b%s%b\n' "${DIM}${BLUE}" "$(repeat_char "$RULE_CHAR" 58)" "$NC"
+}
+
+log_line() {
+    local color="$1"
+    local icon="$2"
+    shift 2
+
+    printf '%b%s%b %s\n' "$color" "$icon" "$NC" "$*"
+}
+
+phase() {
+    [ "$QUIET" -eq 1 ] && return 0
+
+    printf '\n'
+    ui_rule
+    printf '%b%s%b %s\n' "${BOLD}${MAGENTA}" "$ICON_PHASE" "$NC" "$1"
+    ui_rule
+}
+
+summary_item() {
+    local label="$1"
+    local value="$2"
+
+    printf '  %b%-18s%b %s\n' "${DIM}${CYAN}" "$label" "$NC" "$value"
+}
+
+next_step() {
+    local value="$1"
+
+    printf '  %b%s%b %s\n' "${DIM}${BLUE}" "$ICON_STEP" "$NC" "$value"
+}
+
 ok() {
     [ "$QUIET" -eq 1 ] && return 0
-    echo -e "${GREEN}[+]${NC} $*"
+    log_line "${BOLD}${GREEN}" "$ICON_OK" "$*"
 }
 
 warn() {
     [ "$QUIET" -eq 1 ] && return 0
-    echo -e "${YELLOW}[!]${NC} $*"
+    log_line "${BOLD}${YELLOW}" "$ICON_WARN" "$*"
 }
 
 info() {
     [ "$QUIET" -eq 1 ] && return 0
-    echo -e "${CYAN}[*]${NC} $*"
+    log_line "${BOLD}${CYAN}" "$ICON_INFO" "$*"
 }
 
 err() {
-    echo -e "${RED}[-]${NC} $*" >&2
+    log_line "${BOLD}${RED}" "$ICON_ERR" "$*" >&2
 }
 
 debug() {
     [ "$DEBUG" -eq 1 ] || return 0
-    echo -e "${CYAN}[debug]${NC} $*" >&2
+    log_line "${DIM}${MAGENTA}" "$ICON_DEBUG" "$*" >&2
 }
 
 print_usage() {
+    printf '%b%s recon-js%b\n\n' "${BOLD}${MAGENTA}" "$ICON_SCAN" "$NC"
     cat <<EOF
 Usage: $SCRIPT_NAME [options] <domain>
 
@@ -1030,7 +1153,7 @@ verify_candidate_urls() {
     local verify_json="$WORK_DIR/verification.jsonl"
 
     if [ "$VERIFICATION_ENABLED" -ne 1 ]; then
-        warn "Phase 3b: Verification disabled — using discovered assets directly"
+        warn "Phase 3b: Verification disabled - using discovered assets directly"
         return 0
     fi
 
@@ -1041,9 +1164,9 @@ verify_candidate_urls() {
 
     if ! have_cmd httpx; then
         if [ -s "$VERIFIED_TSV" ]; then
-            warn "Phase 3b: httpx not installed — reusing saved verified assets"
+            warn "Phase 3b: httpx not installed - reusing saved verified assets"
         else
-            warn "Phase 3b: httpx not installed — skipping pre-download verification"
+            warn "Phase 3b: httpx not installed - skipping pre-download verification"
         fi
         return 0
     fi
@@ -1051,7 +1174,7 @@ verify_candidate_urls() {
     : > "$VERIFIED_TSV"
     : > "$VERIFICATION_FILTERED_TSV"
 
-    info "Phase 3b: Verifying candidate assets"
+    phase "Phase 3b - Candidate Verification"
     build_verification_queue "$DISCOVERED_TSV" "$queue_file" "$MAX_VERIFY"
 
     if [ ! -s "$queue_file" ]; then
@@ -1392,13 +1515,15 @@ generate_framework_hints() {
 }
 
 print_header() {
-    echo ""
-    echo "==========================================="
-    echo "  recon-js.sh — $TARGET"
-    echo "  $(date '+%Y-%m-%d %H:%M:%S')"
-    echo "  profile: $RECON_PROFILE"
-    echo "==========================================="
-    echo ""
+    printf '\n'
+    ui_rule
+    printf '%b%s recon-js%b\n' "${BOLD}${MAGENTA}" "$ICON_SCAN" "$NC"
+    summary_item "Target" "$TARGET"
+    summary_item "Started" "$(date '+%Y-%m-%d %H:%M:%S')"
+    summary_item "Profile" "$RECON_PROFILE"
+    [ "$RESUME" -eq 1 ] && summary_item "Resume" "enabled"
+    ui_rule
+    printf '\n'
 }
 
 setup_paths() {
@@ -1508,19 +1633,19 @@ seed_resume_state() {
 enumerate_subdomains() {
     local wayback_subs gau_subs historical_seed tmp_merge
 
-    info "Phase 1: Subdomain Enumeration"
+    phase "Phase 1 - Subdomain Enumeration"
     BG_JOBS=()
 
     if have_cmd subfinder; then
         run_bg_function "subfinder" "$SUBS_RAW/subfinder.txt" source_subfinder
     else
-        warn "  subfinder not installed — skipping"
+        warn "  subfinder not installed - skipping"
     fi
 
     if have_cmd amass; then
         run_bg_function "amass" "$SUBS_RAW/amass.txt" source_amass
     else
-        warn "  amass not installed — skipping"
+        warn "  amass not installed - skipping"
     fi
 
     run_bg_function "crt.sh" "$SUBS_RAW/crtsh.txt" source_crtsh
@@ -1529,33 +1654,33 @@ enumerate_subdomains() {
     if have_cmd gau; then
         run_bg_function "gau" "$GAU_URLS_FILE" source_gau_urls
     else
-        warn "  gau not installed — skipping"
+        warn "  gau not installed - skipping"
     fi
 
     if have_cmd chaos; then
         run_bg_function "chaos" "$SUBS_RAW/chaos.txt" source_chaos
     else
-        warn "  chaos not installed — skipping"
+        warn "  chaos not installed - skipping"
     fi
 
     if have_cmd assetfinder; then
         run_bg_function "assetfinder" "$SUBS_RAW/assetfinder.txt" source_assetfinder
     else
-        warn "  assetfinder not installed — skipping"
+        warn "  assetfinder not installed - skipping"
     fi
 
     if have_cmd findomain; then
         run_bg_function "findomain" "$SUBS_RAW/findomain.txt" source_findomain
     else
-        warn "  findomain not installed — skipping"
+        warn "  findomain not installed - skipping"
     fi
 
     if have_cmd puredns && [ -f "$DNS_WORDLIST" ]; then
         run_bg_function "puredns" "$SUBS_RAW/puredns.txt" source_puredns
     elif have_cmd puredns; then
-        warn "  puredns installed but wordlist not found: $DNS_WORDLIST — skipping brute force"
+        warn "  puredns installed but wordlist not found: $DNS_WORDLIST - skipping brute force"
     else
-        warn "  puredns not installed — skipping DNS brute force"
+        warn "  puredns not installed - skipping DNS brute force"
     fi
 
     wait_for_bg_jobs
@@ -1584,10 +1709,10 @@ enumerate_subdomains() {
 }
 
 probe_live_hosts() {
-    info "Phase 2: HTTP Probing"
+    phase "Phase 2 - HTTP Probing"
 
     if [ ! -s "$SUBS_FILE" ]; then
-        warn "  No subdomains available — skipping live probing"
+        warn "  No subdomains available - skipping live probing"
         return 0
     fi
 
@@ -1595,7 +1720,7 @@ probe_live_hosts() {
         info "  [httpx] probing $(wc -l < "$SUBS_FILE") subdomains..."
         httpx -l "$SUBS_FILE" -silent -threads "$HTTPX_THREADS" -timeout "$HTTP_TIMEOUT" -follow-redirects -o "$LIVE_FILE" 2>> "$RUN_LOG" || true
     else
-        warn "  httpx not installed — falling back to http/https host list"
+        warn "  httpx not installed - falling back to http/https host list"
         while IFS= read -r sub; do
             printf 'https://%s\n' "$sub"
             printf 'http://%s\n' "$sub"
@@ -1641,7 +1766,7 @@ run_parallel_live_fetch() {
 discover_assets() {
     local limited_live="$WORK_DIR/live_hosts_limited.txt"
 
-    info "Phase 3: Client-Side Asset Discovery"
+    phase "Phase 3 - Client-Side Asset Discovery"
 
     head -n "$MAX_ACTIVE_HOSTS" "$LIVE_FILE" > "$limited_live" 2>/dev/null || : > "$limited_live"
 
@@ -1659,14 +1784,14 @@ discover_assets() {
             record_raw_discovery "$found" "" "subjs" ""
         done
     else
-        warn "  subjs not installed or no live hosts — skipping"
+        warn "  subjs not installed or no live hosts - skipping"
     fi
 
     if have_cmd getJS && [ -s "$limited_live" ]; then
         info "  [getJS] extracting from live hosts..."
         run_parallel_getjs "$limited_live"
     else
-        warn "  getJS not installed or no live hosts — skipping"
+        warn "  getJS not installed or no live hosts - skipping"
     fi
 
     if have_cmd katana && [ -s "$limited_live" ]; then
@@ -1674,7 +1799,7 @@ discover_assets() {
         safe_timeout "$KATANA_TIMEOUT" katana -list "$limited_live" -silent -jc -d "$KATANA_DEPTH" -o "$KATANA_FILE" >> "$RUN_LOG" 2>&1 || true
         record_asset_urls_from_file "$KATANA_FILE" "katana"
     else
-        warn "  katana not installed or no live hosts — skipping"
+        warn "  katana not installed or no live hosts - skipping"
     fi
 
     if [ -s "$limited_live" ]; then
@@ -1697,7 +1822,7 @@ download_plan() {
         return 0
     fi
 
-    info "Phase 4: Downloading assets ($round_label, $count planned)"
+    phase "Phase 4 - Downloading assets ($round_label, $count planned)"
 
     while IFS=$'\t' read -r _priority url asset_type sources host referrers interesting; do
         [ -n "$url" ] || continue
@@ -1718,30 +1843,31 @@ summarize() {
     failed_count=$(wc -l < "$FAILED_RAW_TSV" 2>/dev/null || printf '0')
     skipped_count=$(wc -l < "$SKIPPED_RAW_TSV" 2>/dev/null || printf '0')
 
-    echo ""
-    echo "==========================================="
-    ok "  DONE — $TARGET"
-    ok "  Subdomains         : $SUBDOMAIN_REPORT ($(wc -l < "$SUBDOMAIN_REPORT" 2>/dev/null || printf '0') total)"
-    ok "  Discovered URLs    : $DISCOVERED_REPORT_TSV ($total_discovered entries)"
-    ok "  Verified URLs      : $VERIFIED_REPORT_TSV ($total_verified entries)"
-    ok "  Downloaded JS-like : $js_download_count"
-    ok "  Interesting assets : $interesting_count"
-    [ "$failed_count" -gt 0 ] && warn "  Failed downloads   : $failed_count"
-    [ "$skipped_count" -gt 0 ] && warn "  Skipped duplicates : $skipped_count"
-    ok "  URL Map            : $URL_MAP_FILE"
-    ok "  Reports            : $REPORTS_DIR/"
-    echo "==========================================="
-    echo ""
-    info "Next steps:"
-    echo "  jsecret -d $TARGET_DIR"
-    echo "  jsecret -f $DISCOVERED_REPORT_TSV"
-    echo "  grep 'filename.js' $URL_MAP_FILE"
-    echo ""
+    printf '\n'
+    ui_rule
+    printf '%b%s Scan complete%b\n' "${BOLD}${GREEN}" "$ICON_DONE" "$NC"
+    summary_item "Target" "$TARGET"
+    summary_item "Subdomains" "$SUBDOMAIN_REPORT ($(wc -l < "$SUBDOMAIN_REPORT" 2>/dev/null || printf '0') total)"
+    summary_item "Discovered URLs" "$DISCOVERED_REPORT_TSV ($total_discovered entries)"
+    summary_item "Verified URLs" "$VERIFIED_REPORT_TSV ($total_verified entries)"
+    summary_item "JS-like files" "$js_download_count"
+    summary_item "Interesting assets" "$interesting_count"
+    [ "$failed_count" -gt 0 ] && summary_item "Failed downloads" "$failed_count"
+    [ "$skipped_count" -gt 0 ] && summary_item "Skipped duplicates" "$skipped_count"
+    summary_item "URL map" "$URL_MAP_FILE"
+    summary_item "Reports" "$REPORTS_DIR/"
+    ui_rule
+    printf '\n'
+    info "Next steps"
+    next_step "jsecret -d $TARGET_DIR"
+    next_step "jsecret -f $DISCOVERED_REPORT_TSV"
+    next_step "grep 'filename.js' $URL_MAP_FILE"
+    printf '\n'
 }
 
 maybe_notify() {
     if have_cmd notify-send; then
-        notify-send "recon-js ✓" "Scan complete for $TARGET\n▸ Subdomains: $(wc -l < "$SUBDOMAIN_REPORT" 2>/dev/null || printf '0')\n▸ Downloaded JS-like: $(awk -F '\t' '$2 ~ /^(js|mjs|ts|service-worker)$/ { count++ } END { print count+0 }' "$DOWNLOADED_RAW_TSV" 2>/dev/null)" >/dev/null 2>&1 || true
+        notify-send "recon-js done" "Scan complete for $TARGET\nSubdomains: $(wc -l < "$SUBDOMAIN_REPORT" 2>/dev/null || printf '0')\nDownloaded JS-like: $(awk -F '\t' '$2 ~ /^(js|mjs|ts|service-worker)$/ { count++ } END { print count+0 }' "$DOWNLOADED_RAW_TSV" 2>/dev/null)" >/dev/null 2>&1 || true
     fi
 }
 
@@ -1749,11 +1875,11 @@ main() {
     local attempted_urls remaining_budget download_source_file
 
     ensure_bash_compat
+    setup_ui
     parse_args "$@"
 
     if [ -z "$TARGET" ]; then
-        echo ""
-        echo -e "${CYAN}[?]${NC} Target domain (e.g. example.com): "
+        printf '\n%b%s%b Target domain (e.g. example.com):\n> ' "${BOLD}${CYAN}" "$ICON_PROMPT" "$NC"
         read -r TARGET
         TARGET="$(trim "${TARGET,,}")"
     else
@@ -1814,3 +1940,4 @@ main() {
 }
 
 main "$@"
+
